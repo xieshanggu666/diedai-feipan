@@ -1,0 +1,27 @@
+{
+  "name": "aerial-timeout",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Browser ultimate-frisbee tactical season game built with Phaser 3, TypeScript, Matter.js and Zustand.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "howler": "^2.2.4",
+    "matter-js": "^0.20.0",
+    "phaser": "^3.90.0",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@types/howler": "^2.2.12",
+    "@types/matter-js": "^0.19.8",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vitest": "^2.1.5"
+  }
+}
