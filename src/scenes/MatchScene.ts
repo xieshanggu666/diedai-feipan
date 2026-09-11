@@ -258,7 +258,9 @@ export class MatchScene extends BaseFieldScene {
         homeTeam: this.homeTeam,
         awayTeam: this.awayTeam,
         field: this.field,
-        seed: this.seed
+        seed: this.seed,
+        plan: structuredClone(this.engine.plan),
+        starterIds: this.homeTeam.players.map((p) => p.id)
       };
       useAppStore.getState().recordResult(replay);
     });

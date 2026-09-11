@@ -4,7 +4,7 @@ import { BaseFieldScene } from './BaseFieldScene';
 import { RouteEditor, type RouteTool } from '../game/RouteEditor';
 import { validatePlan } from '../game/plans';
 import { playSfx, unlockAudio } from '../audio';
-import { currentPlanFor, useAppStore } from '../store/useAppStore';
+import { currentPlanFor, useAppStore, type PlanSession, type Screen } from '../store/useAppStore';
 import { HOME_TEAM } from '../data/gameData';
 import { drawPlayer } from '../game/FieldRenderer';
 
@@ -15,6 +15,8 @@ export class PlanScene extends BaseFieldScene {
   private starterIds: string[] = [];
   private labels: Phaser.GameObjects.Text[] = [];
   private validation: RouteValidation = { ok: false, errors: [], warnings: [] };
+  private session?: PlanSession;
+  private returnScreen: Screen = 'season';
 
   constructor() {
     super('plan');
@@ -23,8 +25,10 @@ export class PlanScene extends BaseFieldScene {
   create(): void {
     super.create();
     const store = useAppStore.getState();
-    this.starterIds = store.starterIds;
-    const plan = currentPlanFor(this.field, this.starterIds, store.plans[this.field.id]);
+    this.session = store.planSession;
+    this.returnScreen = this.session?.returnScreen ?? 'season';
+    this.starterIds = this.session?.starterIds ?? store.starterIds;
+    const plan = currentPlanFor(this.field, this.starterIds, this.session?.plan ?? store.plans[this.field.id]);
     const starters = HOME_TEAM.players.filter((p) => this.starterIds.includes(p.id));
     this.homeTeam = { ...HOME_TEAM, players: starters };
     this.editor = new RouteEditor(this, this.fieldView, plan, this.homeTeam, this.field, {
@@ -41,7 +45,7 @@ export class PlanScene extends BaseFieldScene {
 
     this.events.on(Phaser.Scenes.Events.UPDATE, this.redraw, this);
     this.input.keyboard?.on('keydown-ESC', () => {
-      useAppStore.getState().setScreen('season');
+      useAppStore.getState().setScreen(this.returnScreen);
     });
   }
 
@@ -62,10 +66,23 @@ export class PlanScene extends BaseFieldScene {
         this.labels[index]?.setPosition(s.x, s.y - 6);
       }
     });
+    this.drawFocusMarker();
+  }
+
+  private drawFocusMarker(): void {
+    const focus = this.session?.focus;
+    if (focus?.x === undefined || focus.y === undefined) return;
+    const s = this.fieldView.toScreen({ x: focus.x, y: focus.y });
+    const pulse = 2.5 * Math.sin(this.time.now / 220);
+    this.graphics.lineStyle(2, 0xef4444, 0.95);
+    this.graphics.strokeCircle(s.x, s.y, 15 + pulse);
+    this.graphics.lineBetween(s.x - 8, s.y - 8, s.x + 8, s.y + 8);
+    this.graphics.lineBetween(s.x - 8, s.y + 8, s.x + 8, s.y - 8);
   }
 
   private makeControls(): void {
     const root = this.makeUi('plan-ui');
+    const focus = this.session?.focus;
     root.innerHTML = `
       <div class="panel topbar">
         <div>
@@ -73,10 +90,11 @@ export class PlanScene extends BaseFieldScene {
           <span class="muted">黄色线是传接意图；受风、盯人和接球判定影响，不代表盘一定能到。</span>
         </div>
         <div class="row gap">
-          <button data-action="back">返回赛程</button>
+          <button data-action="back">${this.returnScreen === 'replay' ? '返回回放' : '返回赛程'}</button>
           <button class="primary" data-action="save">保存路线</button>
         </div>
       </div>
+      ${focus ? `<div class="panel focus-banner">针对 <b>${focus.time.toFixed(1)}s</b> 的失误「${focus.message}」调整路线 · ${this.field.name}</div>` : ''}
       <div class="panel left-tools">
         <div class="tool-grid">
           <button data-tool="route" class="active">路线</button>
@@ -116,7 +134,7 @@ export class PlanScene extends BaseFieldScene {
       }
       if (action === 'undo') this.editor.removeSelectedWaypoint();
       if (action === 'clear') this.editor.clearSelectedRoute();
-      if (action === 'back') useAppStore.getState().setScreen('season');
+      if (action === 'back') useAppStore.getState().setScreen(this.returnScreen);
       if (action === 'save') this.savePlan();
       this.refreshValidation(false);
     });
@@ -128,6 +146,10 @@ export class PlanScene extends BaseFieldScene {
           `<button data-player="${p.id}" class="${i === 0 ? 'active' : ''}"><i style="background:#${p.color.toString(16).padStart(6, '0')}"></i>${p.name}</button>`
       )
       .join('');
+    if (focus?.playerId && this.starterIds.includes(focus.playerId)) {
+      this.editor.selectPlayer(focus.playerId);
+      this.updatePlayerButtons(root);
+    }
     this.validationRoot = root.querySelector('.validation')!;
   }
 

@@ -28,7 +28,8 @@ function startScene(screen: string, state: ReturnType<typeof useAppStore.getStat
   if (!isGameSceneScreen(screen)) return;
   const field = getField(state.selectedFieldId, state.customFields);
   if (screen === 'plan') {
-    game.scene.start('plan', { field });
+    const fieldId = state.planSession?.fieldId ?? state.selectedFieldId;
+    game.scene.start('plan', { field: getField(fieldId, state.customFields) });
   }
   if (screen === 'fieldEditor') {
     game.scene.start('fieldEditor', { field });

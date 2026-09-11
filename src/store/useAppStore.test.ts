@@ -37,7 +37,9 @@ function makeReplay(homeScore: number, awayScore: number): ReplayData {
     homeTeam: { ...HOME_TEAM, players: HOME_TEAM.players.slice(0, 5) },
     awayTeam: DEMO_TEAMS[0],
     field: DEMO_FIELDS[0],
-    seed: 123
+    seed: 123,
+    plan: { routes: {}, cues: [] },
+    starterIds: HOME_TEAM.players.slice(0, 5).map((p) => p.id)
   };
 }
 
@@ -135,5 +137,48 @@ describe('season save store', () => {
     expect(state.season.matchday).toBe(2);
     expect(state.season.points).toBe(3);
     expect(state.season.fixtures[0]).toMatchObject({ played: true, scoreFor: 4, scoreAgainst: 1 });
+  });
+
+  it('opens a plan session from a replay failure and clears it after leaving the plan screen', async () => {
+    const { useAppStore } = await import('./useAppStore');
+    const { planContextFromReplay } = await import('../game/replay');
+    const replay = makeReplay(1, 4);
+    useAppStore.getState().recordResult(replay);
+    expect(useAppStore.getState().screen).toBe('replay');
+
+    const failure = {
+      id: 9,
+      time: 12.3,
+      type: 'interception' as const,
+      message: '被防守断盘',
+      playerId: replay.starterIds[0],
+      x: 320,
+      y: 200
+    };
+    useAppStore.getState().openPlanSession({ ...planContextFromReplay(replay, failure), returnScreen: 'replay' });
+
+    let state = useAppStore.getState();
+    expect(state.screen).toBe('plan');
+    expect(state.planSession?.fieldId).toBe(replay.fieldId);
+    expect(state.planSession?.starterIds).toEqual(replay.starterIds);
+    expect(state.planSession?.plan).toEqual(replay.plan);
+    expect(state.planSession?.focus).toMatchObject({ eventId: 9, time: 12.3, type: 'interception' });
+    expect(state.planSession?.returnScreen).toBe('replay');
+
+    useAppStore.getState().setScreen('replay');
+    state = useAppStore.getState();
+    expect(state.planSession).toBeUndefined();
+  });
+
+  it('keeps the plan session when navigating to the plan screen directly', async () => {
+    const { useAppStore } = await import('./useAppStore');
+    const { planContextFromReplay } = await import('../game/replay');
+    const replay = makeReplay(0, 4);
+    const failure = { id: 3, time: 4.2, type: 'stall' as const, message: '读秒未出盘' };
+    useAppStore.getState().openPlanSession({ ...planContextFromReplay(replay, failure), returnScreen: 'replay' });
+
+    useAppStore.getState().setScreen('plan');
+
+    expect(useAppStore.getState().planSession).toBeDefined();
   });
 });

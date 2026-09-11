@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
-import type { FieldSpec, ReplayData } from '../types';
+import type { FieldSpec, MatchEvent, ReplayData } from '../types';
 import { BaseFieldScene } from './BaseFieldScene';
 import { useAppStore } from '../store/useAppStore';
+import { isFailureEvent, planContextFromReplay } from '../game/replay';
 import { playSfx, unlockAudio } from '../audio';
 
 export class ReplayScene extends BaseFieldScene {
@@ -15,6 +16,8 @@ export class ReplayScene extends BaseFieldScene {
   private analysis!: HTMLDivElement;
   private timeText!: HTMLSpanElement;
   private markerBar!: HTMLDivElement;
+  private editPlanButton!: HTMLButtonElement;
+  private selectedEvent?: MatchEvent;
 
   constructor() {
     super('replay');
@@ -37,8 +40,9 @@ export class ReplayScene extends BaseFieldScene {
     const root = this.makeUi('replay-ui');
     root.innerHTML = `
       <div class="panel topbar">
-        <div><strong>比赛回放</strong><span class="muted">拖动时间轴，点击关键节点回到失误前后。</span></div>
+        <div><strong>比赛回放</strong><span class="muted">拖动时间轴，点击关键节点回到失误前后；选中红色失误节点可直接改战术。</span></div>
         <div class="row gap">
+          <button class="primary" data-action="edit-plan" disabled title="先点击一个红色失误节点">修改战术</button>
           <button data-action="restart-season">返回赛季</button>
           ${this.storeAllowsContinue() ? '<button class="primary" data-action="continue">继续赛季</button>' : '<button class="primary" data-action="complete">查看总结</button>'}
         </div>
@@ -76,6 +80,7 @@ export class ReplayScene extends BaseFieldScene {
       if (action === 'restart-season') useAppStore.getState().setScreen('season');
       if (action === 'continue') useAppStore.getState().setScreen('season');
       if (action === 'complete') useAppStore.getState().setScreen('seasonComplete');
+      if (action === 'edit-plan') this.openPlanEditor();
     });
     this.timeline = root.querySelector('.timeline')!;
     this.timeline.addEventListener('input', () => {
@@ -86,6 +91,7 @@ export class ReplayScene extends BaseFieldScene {
     this.eventList = root.querySelector('.replay-events')!;
     this.analysis = root.querySelector('.replay-analysis')!;
     this.timeText = root.querySelector('[data-time]')!;
+    this.editPlanButton = root.querySelector('[data-action="edit-plan"]')!;
     this.renderMarkers();
     this.renderEvents();
     this.renderAnalysis();
@@ -121,32 +127,64 @@ export class ReplayScene extends BaseFieldScene {
             : ['catch', 'throw'].includes(event.type)
               ? 'catch'
               : 'error';
-        return `<button class="mark ${cls}" title="${event.message}" data-frame="${frameIndex}" style="left:${percent}%"></button>`;
+        return `<button class="mark ${cls}" title="${event.message}" data-frame="${frameIndex}" data-event="${event.id}" style="left:${percent}%"></button>`;
       })
       .join('');
     this.markerBar.querySelectorAll('.mark').forEach((button) => {
       button.addEventListener('click', () => {
         this.playing = false;
         this.showFrame(Number((button as HTMLButtonElement).dataset.frame));
+        this.selectEventById(Number((button as HTMLButtonElement).dataset.event));
       });
     });
   }
 
   private renderEvents(): void {
     this.eventList.innerHTML =
-      '<strong>关键节点</strong>' +
+      '<strong>关键节点</strong><span class="muted">点击红色失误节点后可进入战术编辑器。</span>' +
       this.criticalEvents()
         .reverse()
         .map((event) => {
-          const cls = event.critical ? 'critical' : '';
-          return `<div class="event ${cls}"><span>${event.time.toFixed(1)}s</span>${event.message}</div>`;
+          const cls = [event.critical ? 'critical' : '', isFailureEvent(event) ? 'failure' : ''].join(' ').trim();
+          return `<div class="event ${cls}" data-event="${event.id}" data-frame="${this.frameForEvent(event.id)}"><span>${event.time.toFixed(1)}s</span>${event.message}</div>`;
         })
         .join('');
+    this.eventList.querySelectorAll<HTMLElement>('.event').forEach((row) => {
+      row.addEventListener('click', () => {
+        this.playing = false;
+        this.showFrame(Number(row.dataset.frame));
+        this.selectEventById(Number(row.dataset.event));
+      });
+    });
+  }
+
+  private selectEventById(eventId: number): void {
+    const event = this.replay.result.events.find((e) => e.id === eventId);
+    if (!event || !isFailureEvent(event)) return;
+    this.selectedEvent = event;
+    this.eventList.querySelectorAll<HTMLElement>('.event').forEach((row) => {
+      row.classList.toggle('selected', row.dataset.event === String(event.id));
+    });
+    this.markerBar.querySelectorAll<HTMLElement>('.mark').forEach((mark) => {
+      mark.classList.toggle('selected', mark.dataset.event === String(event.id));
+    });
+    this.editPlanButton.disabled = false;
+    this.editPlanButton.textContent = `修改战术 · ${event.time.toFixed(1)}s`;
+    this.editPlanButton.title = `针对「${event.message}」打开战术编辑器`;
+  }
+
+  private openPlanEditor(): void {
+    if (!this.selectedEvent) {
+      playSfx('error');
+      return;
+    }
+    const context = planContextFromReplay(this.replay, this.selectedEvent);
+    useAppStore.getState().openPlanSession({ ...context, returnScreen: 'replay' });
   }
 
   private renderAnalysis(): void {
     const result = this.replay.result;
-    const failures = result.events.filter((e) => ['drop', 'interception', 'stall', 'blocked', 'outOfBounds'].includes(e.type));
+    const failures = result.events.filter((e) => isFailureEvent(e));
     const counts: Record<string, number> = {};
     for (const failure of failures) counts[failure.type] = (counts[failure.type] ?? 0) + 1;
     const labels: Record<string, string> = {

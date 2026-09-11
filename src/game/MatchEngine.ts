@@ -607,7 +607,7 @@ export class MatchEngine {
       const target = this.chooseAiTarget(holder);
       if (target && target.x > holder.x - 20) this.throwTo(target, 10, 'auto');
     }
-    if (this.throwHoldTime >= 6.5) this.endPoint('stall', '持盘超时，攻防转换。', 'away');
+    if (this.throwHoldTime >= 6.5) this.endPoint('stall', '持盘超时，攻防转换。', 'away', holder.id);
   }
 
   private chooseAiTarget(holder: MatchPlayerState): MatchPlayerState | undefined {
@@ -718,11 +718,11 @@ export class MatchEngine {
 
     if (this.diskBlockedObstacle) {
       const obstacle = this.field.obstacles.find((o) => o.id === this.diskBlockedObstacle);
-      this.endPoint('blocked', `飞盘撞上「${obstacle?.label ?? '障碍'}」，攻防转换。`, 'away');
+      this.endPoint('blocked', `飞盘撞上「${obstacle?.label ?? '障碍'}」，攻防转换。`, 'away', this.disk.targetId);
       return;
     }
     if (this.disk.x < 0 || this.disk.x > this.field.width || this.disk.y < 0 || this.disk.y > this.field.height) {
-      this.endPoint('outOfBounds', '飞盘飞出界外，攻防转换。', 'away');
+      this.endPoint('outOfBounds', '飞盘飞出界外，攻防转换。', 'away', this.disk.targetId);
       return;
     }
     this.checkDiskCatch();
@@ -777,7 +777,7 @@ export class MatchEngine {
     const catcher = inRange[0];
     if (!catcher) {
       if (this.disk.z <= 0.5 && this.diskLiveTime > 0.45) {
-        this.endPoint('drop', '飞盘落地，无人接住。', 'away');
+        this.endPoint('drop', '飞盘落地，无人接住。', 'away', this.disk.targetId);
       }
       return;
     }
@@ -786,13 +786,13 @@ export class MatchEngine {
       const targetBonus = this.disk.targetId === catcher.id ? 0.24 : -0.18;
       const probability = clamp(0.64 + catcher.catchRating * 0.03 + targetBonus - this.pressure(catcher) * 0.014, 0.35, 0.97);
       if (this.rng() < probability) this.completeCatch(catcher);
-      else if (this.disk.z < 8 && this.diskLiveTime > 0.55) this.endPoint('drop', `${this.nameOf(catcher.id)} 没能接住飞盘。`, 'away');
+      else if (this.disk.z < 8 && this.diskLiveTime > 0.55) this.endPoint('drop', `${this.nameOf(catcher.id)} 没能接住飞盘。`, 'away', catcher.id);
       return;
     }
 
     const probability = clamp(0.08 + catcher.defenseRating * 0.026 + catcher.catchRating * 0.008 - this.pressure(catcher) * 0.01, 0.04, 0.62);
     if (this.rng() < probability) {
-      this.endPoint('interception', `${this.nameOf(catcher.id)} 断下飞盘，对手直接得分！`, 'away', catcher.id);
+      this.endPoint('interception', `${this.nameOf(catcher.id)} 断下飞盘，对手直接得分！`, 'away', this.disk.targetId);
     }
   }
 

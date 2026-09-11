@@ -208,6 +208,21 @@ export interface ReplayData {
   awayTeam: Team;
   field: FieldSpec;
   seed: number;
+  /** The tactics actually used in this match, including mid-match pause edits. */
+  plan: GamePlan;
+  /** The five starters who played this match. */
+  starterIds: string[];
+}
+
+/** A failure event picked in the replay, carried into the plan editor. */
+export interface ReplayFocus {
+  eventId: number;
+  time: number;
+  type: MatchEventType;
+  message: string;
+  playerId?: string;
+  x?: number;
+  y?: number;
 }
 
 export interface PersistedSave {

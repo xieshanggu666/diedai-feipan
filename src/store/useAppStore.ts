@@ -7,6 +7,7 @@ import {
 } from '../data/gameData';
 import type { FieldSpec, GamePlan, ReplayData, SeasonState } from '../types';
 import { formationForIndex, makeDefaultPlan } from '../game/plans';
+import type { ReplayPlanContext } from '../game/replay';
 
 const SAVE_KEY = 'aerial-timeout-save-v1';
 
@@ -20,6 +21,11 @@ export type Screen =
   | 'replay'
   | 'fieldEditor'
   | 'seasonComplete';
+
+/** A plan-editor session opened from a replay failure node; not persisted. */
+export interface PlanSession extends ReplayPlanContext {
+  returnScreen: Screen;
+}
 
 interface SaveShape {
   version: number;
@@ -38,7 +44,9 @@ export interface AppState extends SaveShape {
   screen: Screen;
   currentMatchday: number;
   lastReplay?: ReplayData;
+  planSession?: PlanSession;
   setScreen: (screen: Screen) => void;
+  openPlanSession: (session: PlanSession) => void;
   startNewSeason: () => void;
   recordResult: (replay: ReplayData) => void;
   togglePlayerUnlock: (id: string) => void;
@@ -144,7 +152,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   screen: 'menu',
   currentMatchday: initial.season.matchday,
 
-  setScreen: (screen) => set({ screen }),
+  setScreen: (screen) => set(screen === 'plan' ? { screen } : { screen, planSession: undefined }),
+
+  openPlanSession: (session) => set({ planSession: session, screen: 'plan' }),
 
   startNewSeason: () => {
     const fresh = defaultSave();
@@ -154,6 +164,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       unlockedFieldIds: get().unlockedFieldIds,
       plans: get().plans,
       lastReplay: undefined,
+      planSession: undefined,
       screen: 'season',
       currentMatchday: 1
     });
@@ -275,7 +286,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   resetAll: () => {
     localStorage.removeItem(SAVE_KEY);
-    set({ ...defaultSave(), screen: 'menu', currentMatchday: 1, lastReplay: undefined });
+    set({ ...defaultSave(), screen: 'menu', currentMatchday: 1, lastReplay: undefined, planSession: undefined });
   }
 }));
 
